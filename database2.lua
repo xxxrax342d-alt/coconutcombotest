@@ -44,6 +44,11 @@ label.Parent = frame
 
 local function updateCounterDisplay()
     label.Text = tostring(comboCounter)
+    if comboCounter == ACCOUNT_ID then
+        frame.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+    else
+        frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    end
 end
 
 function EquipCanister()
@@ -82,7 +87,9 @@ function SpawnCoconut(isCombo)
     }
     game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerActivesCommand"):FireServer(unpack(args))
     if isCombo then
-        print("Аккаунт " .. ACCOUNT_ID .. " комбо")
+        print("✅ Аккаунт " .. ACCOUNT_ID .. " КОМБО КОКОС (очередь " .. comboCounter .. ")")
+    else
+        print("🥥 Аккаунт " .. ACCOUNT_ID .. " обычный кокос")
     end
 end
 
@@ -97,6 +104,7 @@ function IsComboCoconutPresent()
     return false
 end
 
+-- Мониторинг появления/исчезновения комбо
 spawn(function()
     while true do
         local present = IsComboCoconutPresent()
@@ -107,19 +115,28 @@ spawn(function()
             coconutActive = false
             coconutLostTime = tick()
             comboCounter = comboCounter + 1
-            updateCounterDisplay()
             if comboCounter > 5 then comboCounter = 1 end
+            updateCounterDisplay()
+            print("📊 Счетчик комбо:", comboCounter, "Очередь аккаунта", ACCOUNT_ID, "→", comboCounter == ACCOUNT_ID and "ТВОЙ ХОД!" or "ЖДИ")
         end
         task.wait(0.5)
     end
 end)
 
+-- ТАЙМЕР 15 СЕКУНД - ТОЛЬКО ДЛЯ СВОЕЙ ОЧЕРЕДИ
 spawn(function()
     while true do
         if not coconutActive and coconutLostTime and tick() - coconutLostTime >= 15 then
-            SpawnCoconut(false)
-            if currentAccessory ~= "canister" then
+            -- ПРОВЕРКА ОЧЕРЕДИ: делаем что-то ТОЛЬКО если наша очередь
+            if comboCounter == ACCOUNT_ID then
+                print("🎯 Аккаунт " .. ACCOUNT_ID .. " кидает КОМБО (очередь " .. comboCounter .. ")")
+                SpawnCoconut(true)
+                hasSpawnedCombo = true
                 EquipCanister()
+            else
+                -- ЕСЛИ НЕ ОЧЕРЕДЬ - ВООБЩЕ НИЧЕГО НЕ ДЕЛАЕМ
+                print("⏳ Аккаунт " .. ACCOUNT_ID .. " ждет своей очереди (сейчас " .. comboCounter .. ")")
+                -- НЕ кидаем кокос, НЕ надеваем рюкзак
             end
             coconutLostTime = nil
         end
@@ -127,9 +144,10 @@ spawn(function()
     end
 end)
 
+-- Страховка канистры (только для своей очереди)
 spawn(function()
     while true do
-        if lastValue ~= 39 and currentAccessory ~= "canister" then
+        if comboCounter == ACCOUNT_ID and lastValue ~= 39 and currentAccessory ~= "canister" then
             EquipCanister()
         end
         task.wait(5)
@@ -141,22 +159,21 @@ require(ReplicatedStorage.Events).ClientListen("PlayerAbilityEvent", function(da
         if tag == "Combo Coconuts" or tag == "ComboCoconuts" then
             if info.Action == "Update" then
                 local value = info.Values and info.Values[1] or 0
-                if value < 39 and not hasCanister then
-                    EquipCanister()
-                elseif value == 39 and not hasPorcelain then
-                    EquipPorcelain()
+                
+                -- Переключение рюкзаков (только для своей очереди)
+                if comboCounter == ACCOUNT_ID then
+                    if value < 39 and not hasCanister then
+                        EquipCanister()
+                    elseif value == 39 and not hasPorcelain then
+                        EquipPorcelain()
+                    end
                 end
+                
+                -- Обычные кокосы (всегда, независимо от очереди)
                 if value == 5 or value == 11 or value == 17 or value == 23 then
                     SpawnCoconut(false)
                 end
-                if value == 39 and not hasSpawnedCombo then
-                    local remainder = comboCounter % 5
-                    local myTurn = (ACCOUNT_ID == 5 and remainder == 0) or (ACCOUNT_ID ~= 5 and remainder == ACCOUNT_ID)
-                    if myTurn then
-                        SpawnCoconut(true)
-                        hasSpawnedCombo = true
-                    end
-                end
+                
                 lastValue = value
             end
         end
@@ -164,3 +181,9 @@ require(ReplicatedStorage.Events).ClientListen("PlayerAbilityEvent", function(da
 end)
 
 updateCounterDisplay()
+print("========================================")
+print("✅ Аккаунт " .. ACCOUNT_ID .. " запущен")
+print("📊 Счетчик комбо показывает текущую очередь")
+print("🎯 Твой ход когда счетчик = " .. ACCOUNT_ID)
+print("⏳ В остальное время - полное ожидание")
+print("========================================")
