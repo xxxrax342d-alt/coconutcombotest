@@ -14,6 +14,7 @@ local hasPorcelain = false
 local hasSpawnedCombo = false
 local comboCounter = 0
 
+-- Интерфейс
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ComboCounter"
 screenGui.Parent = game:GetService("CoreGui")
@@ -106,6 +107,7 @@ function IsComboCoconutPresent()
     return false
 end
 
+-- Мониторинг появления/исчезновения комбо
 spawn(function()
     while true do
         local present = IsComboCoconutPresent()
@@ -120,31 +122,21 @@ spawn(function()
             if comboCounter > 5 then comboCounter = 1 end
             updateCounterDisplay()
             print("📊 Счетчик комбо:", comboCounter)
+
+            -- После исчезновения комбо проверяем, не должны ли мы кинуть своё
+            if comboCounter == ACCOUNT_ID and lastValue == 39 and not hasSpawnedCombo then
+                print("🎯 Аккаунт " .. ACCOUNT_ID .. " кидает КОМБО сразу после исчезновения")
+                SpawnCoconut(true)
+                hasSpawnedCombo = true
+            end
         end
         task.wait(0.5)
     end
 end)
 
-spawn(function()
-    while true do
-        if not coconutActive and coconutLostTime and tick() - coconutLostTime >= 15 then
-            if comboCounter == ACCOUNT_ID then
-                if lastValue == 39 then
-                    print("🎯 Аккаунт " .. ACCOUNT_ID .. " кидает КОМБО (значение 39, очередь " .. comboCounter .. ")")
-                    SpawnCoconut(true)
-                    hasSpawnedCombo = true
-                else
-                    print("⏳ Аккаунт " .. ACCOUNT_ID .. " очередь подошла, но значение ещё не 39 (сейчас " .. lastValue .. "). Жду набивки.")
-                end
-            else
-                print("⏳ Аккаунт " .. ACCOUNT_ID .. " ждёт очереди (сейчас " .. comboCounter .. ")")
-            end
-            coconutLostTime = nil
-        end
-        task.wait(1)
-    end
-end)
+-- Таймер больше не нужен для комбо, но оставим на всякий случай для других действий? Пока уберём.
 
+-- Канистра надевается всегда, когда значение < 39
 spawn(function()
     while true do
         if lastValue ~= 39 and currentAccessory ~= "canister" then
@@ -154,22 +146,38 @@ spawn(function()
     end
 end)
 
+-- Основной обработчик событий комбо
 require(ReplicatedStorage.Events).ClientListen("PlayerAbilityEvent", function(data)
     for tag, info in pairs(data) do
         if tag == "Combo Coconuts" or tag == "ComboCoconuts" then
             if info.Action == "Update" then
                 local value = info.Values and info.Values[1] or 0
 
+                -- Сброс флага, если значение упало ниже 39
+                if value < 39 then
+                    hasSpawnedCombo = false
+                end
+
+                -- Фарфор надевается всегда на 39
                 if value == 39 and not hasPorcelain then
                     EquipPorcelain()
                 end
 
+                -- Канистра надевается всегда на значении < 39
                 if value < 39 and not hasCanister then
                     EquipCanister()
                 end
 
+                -- Обычные кокосы на промежуточных значениях
                 if value == 5 or value == 11 or value == 17 or value == 23 then
                     SpawnCoconut(false)
+                end
+
+                -- Если достигли 39, наша очередь, и комбо не активно → кидаем немедленно
+                if value == 39 and not hasSpawnedCombo and comboCounter == ACCOUNT_ID and not coconutActive then
+                    print("🎯 Аккаунт " .. ACCOUNT_ID .. " кидает КОМБО сразу после набивки 39 (очередь " .. comboCounter .. ")")
+                    SpawnCoconut(true)
+                    hasSpawnedCombo = true
                 end
 
                 lastValue = value
@@ -182,7 +190,7 @@ updateCounterDisplay()
 print("========================================")
 print("✅ Аккаунт " .. ACCOUNT_ID .. " запущен")
 print("📊 Счетчик комбо:", comboCounter)
-print("🎯 Комбо кидается только если: очередь=" .. ACCOUNT_ID .. " И значение=39")
+print("🎯 Комбо кидается, если очередь=" .. ACCOUNT_ID .. " И значение=39 И комбо не активно")
 print("🍶 Фарфор надевается на 39 всегда")
 print("🥥 Канистра надевается при <39 всегда")
 print("========================================")
