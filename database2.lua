@@ -104,7 +104,6 @@ function IsComboCoconutPresent()
     return false
 end
 
--- Мониторинг появления/исчезновения комбо
 spawn(function()
     while true do
         local present = IsComboCoconutPresent()
@@ -123,20 +122,16 @@ spawn(function()
     end
 end)
 
--- ТАЙМЕР 15 СЕКУНД - ТОЛЬКО ДЛЯ СВОЕЙ ОЧЕРЕДИ
 spawn(function()
     while true do
         if not coconutActive and coconutLostTime and tick() - coconutLostTime >= 15 then
-            -- ПРОВЕРКА ОЧЕРЕДИ: делаем что-то ТОЛЬКО если наша очередь
             if comboCounter == ACCOUNT_ID then
                 print("🎯 Аккаунт " .. ACCOUNT_ID .. " кидает КОМБО (очередь " .. comboCounter .. ")")
                 SpawnCoconut(true)
                 hasSpawnedCombo = true
                 EquipCanister()
             else
-                -- ЕСЛИ НЕ ОЧЕРЕДЬ - ВООБЩЕ НИЧЕГО НЕ ДЕЛАЕМ
                 print("⏳ Аккаунт " .. ACCOUNT_ID .. " ждет своей очереди (сейчас " .. comboCounter .. ")")
-                -- НЕ кидаем кокос, НЕ надеваем рюкзак
             end
             coconutLostTime = nil
         end
@@ -144,7 +139,6 @@ spawn(function()
     end
 end)
 
--- Страховка канистры (только для своей очереди)
 spawn(function()
     while true do
         if comboCounter == ACCOUNT_ID and lastValue ~= 39 and currentAccessory ~= "canister" then
@@ -160,16 +154,16 @@ require(ReplicatedStorage.Events).ClientListen("PlayerAbilityEvent", function(da
             if info.Action == "Update" then
                 local value = info.Values and info.Values[1] or 0
                 
-                -- Переключение рюкзаков (только для своей очереди)
-                if comboCounter == ACCOUNT_ID then
-                    if value < 39 and not hasCanister then
-                        EquipCanister()
-                    elseif value == 39 and not hasPorcelain then
-                        EquipPorcelain()
-                    end
+                -- ФАРФОР ВСЕГДА НА 39 (независимо от очереди)
+                if value == 39 and not hasPorcelain then
+                    EquipPorcelain()
                 end
                 
-                -- Обычные кокосы (всегда, независимо от очереди)
+                -- Канистра только в свою очередь (кроме 39)
+                if comboCounter == ACCOUNT_ID and value < 39 and not hasCanister then
+                    EquipCanister()
+                end
+                
                 if value == 5 or value == 11 or value == 17 or value == 23 then
                     SpawnCoconut(false)
                 end
@@ -185,5 +179,5 @@ print("========================================")
 print("✅ Аккаунт " .. ACCOUNT_ID .. " запущен")
 print("📊 Счетчик комбо показывает текущую очередь")
 print("🎯 Твой ход когда счетчик = " .. ACCOUNT_ID)
-print("⏳ В остальное время - полное ожидание")
+print("🍶 Фарфор надевается на 39 ВСЕГДА")
 print("========================================")
