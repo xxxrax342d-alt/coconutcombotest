@@ -91,6 +91,13 @@ function SpawnCoconut(isCombo)
     game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerActivesCommand"):FireServer(unpack(args))
     if isCombo then
         print("✅ Аккаунт " .. ACCOUNT_ID .. " КОМБО КОКОС (очередь " .. comboCounter .. ")")
+        -- Гарантированно надеваем канистру через 1 секунду после спавна комбо
+        task.spawn(function()
+            task.wait(1)
+            if lastValue ~= 39 and currentAccessory ~= "canister" then
+                EquipCanister()
+            end
+        end)
     else
         print("🥥 Аккаунт " .. ACCOUNT_ID .. " обычный кокос")
     end
@@ -134,9 +141,7 @@ spawn(function()
     end
 end)
 
--- Таймер больше не нужен для комбо, но оставим на всякий случай для других действий? Пока уберём.
-
--- Канистра надевается всегда, когда значение < 39
+-- Канистра надевается всегда, когда значение < 39 (страховка каждые 5 секунд)
 spawn(function()
     while true do
         if lastValue ~= 39 and currentAccessory ~= "canister" then
@@ -163,7 +168,7 @@ require(ReplicatedStorage.Events).ClientListen("PlayerAbilityEvent", function(da
                     EquipPorcelain()
                 end
 
-                -- Канистра надевается всегда на значении < 39
+                -- Канистра надевается всегда на значении < 39 (если не надета)
                 if value < 39 and not hasCanister then
                     EquipCanister()
                 end
