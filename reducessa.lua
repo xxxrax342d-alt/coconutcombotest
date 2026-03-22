@@ -7,36 +7,52 @@ local LocalPlayer = Players.LocalPlayer
 local isHidden = false  -- состояние: скрыты или видны
 local savedStates = {}  -- таблица для хранения сохранённых состояний
 
+-- Функция для проверки, является ли объект RewardsPopUp
+local function isRewardsPopUp(obj)
+    return obj.Name and obj.Name:lower():find("rewards") and obj.Name:lower():find("popup")
+end
+
+-- Функция для скрытия объекта
+local function hideObject(obj)
+    if obj:IsA("ScreenGui") then
+        obj.Enabled = false
+    elseif obj:IsA("Frame") or obj:IsA("GuiObject") then
+        obj.Visible = false
+    end
+end
+
+-- Функция для показа объекта
+local function showObject(obj, savedState)
+    if obj:IsA("ScreenGui") then
+        obj.Enabled = savedState and savedState.enabled or true
+    elseif obj:IsA("Frame") or obj:IsA("GuiObject") then
+        obj.Visible = savedState and savedState.visible or true
+    end
+end
+
 -- Функция для рекурсивного поиска и сохранения/восстановления RewardsPopUp в GUI
 local function processRewardsPopUpInGUI(guiObject, action)
     if not guiObject then return end
     
     -- Проверяем текущий объект
-    if guiObject.Name and guiObject.Name:lower():find("rewards") and guiObject.Name:lower():find("popup") then
+    if isRewardsPopUp(guiObject) then
         if action == "hide" then
             -- Сохраняем состояние
             if not savedStates[guiObject] then
                 savedStates[guiObject] = {
                     isScreenGui = guiObject:IsA("ScreenGui"),
-                    enabled = guiObject.Enabled,
+                    isFrame = guiObject:IsA("Frame"),
+                    enabled = guiObject:IsA("ScreenGui") and guiObject.Enabled or nil,
                     visible = guiObject.Visible
                 }
             end
             -- Скрываем
-            if guiObject:IsA("ScreenGui") then
-                guiObject.Enabled = false
-            else
-                guiObject.Visible = false
-            end
+            hideObject(guiObject)
             print("🔒 Скрыт: " .. guiObject:GetFullName())
         elseif action == "show" then
             -- Восстанавливаем состояние
             if savedStates[guiObject] then
-                if savedStates[guiObject].isScreenGui then
-                    guiObject.Enabled = savedStates[guiObject].enabled
-                else
-                    guiObject.Visible = savedStates[guiObject].visible
-                end
+                showObject(guiObject, savedStates[guiObject])
                 print("🔓 Показан: " .. guiObject:GetFullName())
             end
         end
@@ -58,28 +74,21 @@ local function processRewardsPopUpInPlayerGui(action)
         
         -- Также ищем напрямую по имени
         local rewardsPopUp = playerGui:FindFirstChild("RewardsPopUp")
-        if rewardsPopUp then
+        if rewardsPopUp and isRewardsPopUp(rewardsPopUp) then
             if action == "hide" then
                 if not savedStates[rewardsPopUp] then
                     savedStates[rewardsPopUp] = {
                         isScreenGui = rewardsPopUp:IsA("ScreenGui"),
-                        enabled = rewardsPopUp.Enabled,
+                        isFrame = rewardsPopUp:IsA("Frame"),
+                        enabled = rewardsPopUp:IsA("ScreenGui") and rewardsPopUp.Enabled or nil,
                         visible = rewardsPopUp.Visible
                     }
                 end
-                if rewardsPopUp:IsA("ScreenGui") then
-                    rewardsPopUp.Enabled = false
-                else
-                    rewardsPopUp.Visible = false
-                end
+                hideObject(rewardsPopUp)
                 print("✅ RewardsPopUp скрыт из PlayerGui")
             elseif action == "show" then
                 if savedStates[rewardsPopUp] then
-                    if savedStates[rewardsPopUp].isScreenGui then
-                        rewardsPopUp.Enabled = savedStates[rewardsPopUp].enabled
-                    else
-                        rewardsPopUp.Visible = savedStates[rewardsPopUp].visible
-                    end
+                    showObject(rewardsPopUp, savedStates[rewardsPopUp])
                     print("✅ RewardsPopUp показан в PlayerGui")
                 end
             end
@@ -87,28 +96,21 @@ local function processRewardsPopUpInPlayerGui(action)
         
         -- Ищем похожие названия
         for _, child in ipairs(playerGui:GetChildren()) do
-            if child.Name and child.Name:lower():find("rewards") and child.Name:lower():find("popup") then
+            if isRewardsPopUp(child) then
                 if action == "hide" then
                     if not savedStates[child] then
                         savedStates[child] = {
                             isScreenGui = child:IsA("ScreenGui"),
-                            enabled = child.Enabled,
+                            isFrame = child:IsA("Frame"),
+                            enabled = child:IsA("ScreenGui") and child.Enabled or nil,
                             visible = child.Visible
                         }
                     end
-                    if child:IsA("ScreenGui") then
-                        child.Enabled = false
-                    else
-                        child.Visible = false
-                    end
+                    hideObject(child)
                     print("✅ " .. child.Name .. " скрыт из PlayerGui")
                 elseif action == "show" then
                     if savedStates[child] then
-                        if savedStates[child].isScreenGui then
-                            child.Enabled = savedStates[child].enabled
-                        else
-                            child.Visible = savedStates[child].visible
-                        end
+                        showObject(child, savedStates[child])
                         print("✅ " .. child.Name .. " показан в PlayerGui")
                     end
                 end
@@ -122,28 +124,21 @@ local function processRewardsPopUpInStarterGui(action)
     local starterGui = game:FindFirstChild("StarterGui")
     if starterGui then
         local rewardsPopUp = starterGui:FindFirstChild("RewardsPopUp")
-        if rewardsPopUp then
+        if rewardsPopUp and isRewardsPopUp(rewardsPopUp) then
             if action == "hide" then
                 if not savedStates[rewardsPopUp] then
                     savedStates[rewardsPopUp] = {
                         isScreenGui = rewardsPopUp:IsA("ScreenGui"),
-                        enabled = rewardsPopUp.Enabled,
+                        isFrame = rewardsPopUp:IsA("Frame"),
+                        enabled = rewardsPopUp:IsA("ScreenGui") and rewardsPopUp.Enabled or nil,
                         visible = rewardsPopUp.Visible
                     }
                 end
-                if rewardsPopUp:IsA("ScreenGui") then
-                    rewardsPopUp.Enabled = false
-                else
-                    rewardsPopUp.Visible = false
-                end
+                hideObject(rewardsPopUp)
                 print("✅ RewardsPopUp скрыт из StarterGui")
             elseif action == "show" then
                 if savedStates[rewardsPopUp] then
-                    if savedStates[rewardsPopUp].isScreenGui then
-                        rewardsPopUp.Enabled = savedStates[rewardsPopUp].enabled
-                    else
-                        rewardsPopUp.Visible = savedStates[rewardsPopUp].visible
-                    end
+                    showObject(rewardsPopUp, savedStates[rewardsPopUp])
                     print("✅ RewardsPopUp показан в StarterGui")
                 end
             end
@@ -151,28 +146,21 @@ local function processRewardsPopUpInStarterGui(action)
         
         -- Ищем похожие названия
         for _, child in ipairs(starterGui:GetChildren()) do
-            if child.Name and child.Name:lower():find("rewards") and child.Name:lower():find("popup") then
+            if isRewardsPopUp(child) then
                 if action == "hide" then
                     if not savedStates[child] then
                         savedStates[child] = {
                             isScreenGui = child:IsA("ScreenGui"),
-                            enabled = child.Enabled,
+                            isFrame = child:IsA("Frame"),
+                            enabled = child:IsA("ScreenGui") and child.Enabled or nil,
                             visible = child.Visible
                         }
                     end
-                    if child:IsA("ScreenGui") then
-                        child.Enabled = false
-                    else
-                        child.Visible = false
-                    end
+                    hideObject(child)
                     print("✅ " .. child.Name .. " скрыт из StarterGui")
                 elseif action == "show" then
                     if savedStates[child] then
-                        if savedStates[child].isScreenGui then
-                            child.Enabled = savedStates[child].enabled
-                        else
-                            child.Visible = savedStates[child].visible
-                        end
+                        showObject(child, savedStates[child])
                         print("✅ " .. child.Name .. " показан в StarterGui")
                     end
                 end
@@ -186,23 +174,21 @@ local function processRewardsPopUpInCoreGui(action)
     local coreGui = game:FindFirstChild("CoreGui")
     if coreGui then
         for _, gui in ipairs(coreGui:GetChildren()) do
-            if gui.Name and gui.Name:lower():find("rewards") and gui.Name:lower():find("popup") then
-                if gui:IsA("ScreenGui") then
-                    if action == "hide" then
-                        if not savedStates[gui] then
-                            savedStates[gui] = {
-                                isScreenGui = true,
-                                enabled = gui.Enabled,
-                                visible = gui.Visible
-                            }
-                        end
-                        gui.Enabled = false
-                        print("✅ " .. gui.Name .. " отключён в CoreGui")
-                    elseif action == "show" then
-                        if savedStates[gui] then
-                            gui.Enabled = savedStates[gui].enabled
-                            print("✅ " .. gui.Name .. " включён в CoreGui")
-                        end
+            if isRewardsPopUp(gui) and gui:IsA("ScreenGui") then
+                if action == "hide" then
+                    if not savedStates[gui] then
+                        savedStates[gui] = {
+                            isScreenGui = true,
+                            enabled = gui.Enabled,
+                            visible = gui.Visible
+                        }
+                    end
+                    gui.Enabled = false
+                    print("✅ " .. gui.Name .. " отключён в CoreGui")
+                elseif action == "show" then
+                    if savedStates[gui] then
+                        gui.Enabled = savedStates[gui].enabled
+                        print("✅ " .. gui.Name .. " включён в CoreGui")
                     end
                 end
             end
@@ -215,20 +201,17 @@ local function setupInterceptor()
     -- Перехват в PlayerGui
     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
     playerGui.ChildAdded:Connect(function(child)
-        if child.Name and child.Name:lower():find("rewards") and child.Name:lower():find("popup") then
+        if isRewardsPopUp(child) then
             if isHidden then
-                if child:IsA("ScreenGui") then
-                    child.Enabled = false
-                else
-                    child.Visible = false
-                end
+                hideObject(child)
                 print("🚫 Перехвачен и скрыт новый: " .. child.Name)
             end
             -- Сохраняем состояние
             if not savedStates[child] then
                 savedStates[child] = {
                     isScreenGui = child:IsA("ScreenGui"),
-                    enabled = child.Enabled,
+                    isFrame = child:IsA("Frame"),
+                    enabled = child:IsA("ScreenGui") and child.Enabled or nil,
                     visible = child.Visible
                 }
             end
@@ -239,19 +222,16 @@ local function setupInterceptor()
     local starterGui = game:FindFirstChild("StarterGui")
     if starterGui then
         starterGui.ChildAdded:Connect(function(child)
-            if child.Name and child.Name:lower():find("rewards") and child.Name:lower():find("popup") then
+            if isRewardsPopUp(child) then
                 if isHidden then
-                    if child:IsA("ScreenGui") then
-                        child.Enabled = false
-                    else
-                        child.Visible = false
-                    end
+                    hideObject(child)
                     print("🚫 Перехвачен и скрыт новый в StarterGui: " .. child.Name)
                 end
                 if not savedStates[child] then
                     savedStates[child] = {
                         isScreenGui = child:IsA("ScreenGui"),
-                        enabled = child.Enabled,
+                        isFrame = child:IsA("Frame"),
+                        enabled = child:IsA("ScreenGui") and child.Enabled or nil,
                         visible = child.Visible
                     }
                 end
@@ -263,11 +243,9 @@ local function setupInterceptor()
     local coreGui = game:FindFirstChild("CoreGui")
     if coreGui then
         coreGui.ChildAdded:Connect(function(child)
-            if child.Name and child.Name:lower():find("rewards") and child.Name:lower():find("popup") then
-                if child:IsA("ScreenGui") and isHidden then
-                    child.Enabled = false
-                    print("🚫 Перехвачен и отключён новый в CoreGui: " .. child.Name)
-                end
+            if isRewardsPopUp(child) and child:IsA("ScreenGui") and isHidden then
+                child.Enabled = false
+                print("🚫 Перехвачен и отключён новый в CoreGui: " .. child.Name)
                 if not savedStates[child] then
                     savedStates[child] = {
                         isScreenGui = true,
