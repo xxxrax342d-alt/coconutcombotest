@@ -93,7 +93,7 @@ end
 -- Обработка нажатия V
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if input.KeyCode == Enum.KeyCode.V then
+    if input.KeyCode == Enum.KeyCode.F then
         local root = getRoot()
         if root then
             startPosition = root.Position
@@ -125,7 +125,7 @@ end)
 
 UserInputService.InputEnded:Connect(function(input, gp)
     if gp then return end
-    if input.KeyCode == Enum.KeyCode.V then
+    if input.KeyCode == Enum.KeyCode.F then
         if isActive and startPosition then
             local root = getRoot()
             if root then
