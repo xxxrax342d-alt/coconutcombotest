@@ -1,24 +1,17 @@
--- PetalPart Teleporter (ковдаун: красные 4 сек, остальные 8 сек)
+-- PetalPart Teleporter (лут других лепестков при наличии баффов)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 -- ========== КОНФИГУРАЦИЯ ==========
-local CONSTANT_TELEPORT_INTERVAL = 1.0
+local UPDATE_INTERVAL = 1.0               -- частота проверки баффов
+local CONSTANT_TELEPORT_INTERVAL = 1.0    -- интервал между телепортами
 local PETAL_PART_NAME = "PetalPart"
-local BUFF_THRESHOLD = 4
-local MAX_ATTEMPTS = 3
-local RETRY_DELAY = 0.2
-local NEW_PETAL_DELAY = 0.3
 
--- Ковдаун для разных цветов
-local COOLDOWN_RED = 4      -- красные: 4 секунды
-local COOLDOWN_OTHER = 8    -- остальные: 8 секунд
-
+-- Цвета лепестков
 local PETAL_COLORS = {
     ["Blue Petal"]    = Color3.fromRGB(33, 66, 249),
     ["Black Petal"]   = Color3.fromRGB(11, 11, 11),
@@ -28,13 +21,27 @@ local PETAL_COLORS = {
     ["Violet Petal"]  = Color3.fromRGB(94, 38, 177),
     ["Yellow Petal"]  = Color3.fromRGB(238, 204, 79),
     ["Scarlet Petal"] = Color3.fromRGB(171, 19, 19),
-    ["Marigold Petal"]= Color3.fromRGB(218, 168, 28),
+    ["Merigold Petal"]= Color3.fromRGB(218, 168, 28),
     ["Red Petal"]     = Color3.fromRGB(249, 34, 34),
+    ["Grey Petal"]    = Color3.fromRGB(127, 127, 127),
+    ["Pink Petal"]    = Color3.fromRGB(255, 130, 201),
+    ["Periwinkle Petal"] = Color3.fromRGB(150, 156, 236),
+}
+
+-- Приоритет цветов (меньше = выше)
+local COLOR_PRIORITY = {
+    ["Red Petal"] = 1,
+    ["Periwinkle Petal"] = 2,
+    ["Pink Petal"] = 3,
+    ["Scarlet Petal"] = 4,
+    ["Violet Petal"] = 5,
+    ["Merigold Petal"] = 6,
+    ["Green Petal"] = 7,
+    ["Yellow Petal"] = 8,
 }
 
 local isTeleporting = false
 local enabled = true
-local colorCooldowns = {}
 
 -- ========== ВСПОМОГАТЕЛЬНЫЕ ==========
 local function getColorName(color)
@@ -48,59 +55,98 @@ local function getColorName(color)
     return "Unknown"
 end
 
--- Проверка, красный ли цвет
-local function isRedColor(color)
-    local redColor = PETAL_COLORS["Red Petal"]
-    if not redColor then return false end
-    return math.abs(color.R - redColor.R) < 0.01 and
-           math.abs(color.G - redColor.G) < 0.01 and
-           math.abs(color.B - redColor.B) < 0.01
-end
-
--- Получение ковдауна для цвета
-local function getCooldownForColor(color)
-    if isRedColor(color) then
-        return COOLDOWN_RED
-    else
-        return COOLDOWN_OTHER
+-- Поиск лепестка конкретного цвета (ближайший)
+local function findNearestPetalByColor(targetColor, maxAttempts)
+    maxAttempts = maxAttempts or 1
+    for attempt = 1, maxAttempts do
+        local particles = Workspace:FindFirstChild("Particles")
+        if particles then
+            local character = LocalPlayer.Character
+            if character then
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local best, bestDist = nil, math.huge
+                    for _, obj in ipairs(particles:GetChildren()) do
+                        if obj.Name == PETAL_PART_NAME and obj:IsA("BasePart") then
+                            local col = obj.Color
+                            if math.abs(col.R - targetColor.R) < 0.01 and
+                               math.abs(col.G - targetColor.G) < 0.01 and
+                               math.abs(col.B - targetColor.B) < 0.01 then
+                                local dist = (obj.Position - hrp.Position).Magnitude
+                                if dist < bestDist then
+                                    bestDist = dist
+                                    best = obj
+                                end
+                            end
+                        end
+                    end
+                    if best then return best end
+                end
+            end
+        end
+        if attempt < maxAttempts then task.wait(0.1) end
     end
+    return nil
 end
 
--- Проверка, находится ли цвет на ковдауне
-local function isOnCooldown(color)
-    local colorKey = getColorName(color)
-    if not colorKey then return false end
-    local cooldownEnd = colorCooldowns[colorKey]
-    if cooldownEnd and os.time() < cooldownEnd then
-        local remaining = cooldownEnd - os.time()
-        local cdType = isRedColor(color) and "красный" or "обычный"
-        print(string.format("⏳ %s (%s) на ковдауне еще %.1f сек", colorKey, cdType, remaining))
-        return true
+-- Получение всех уникальных цветов лепестков в мире (ближайший на цвет)
+local function getAllUniquePetals()
+    local particles = Workspace:FindFirstChild("Particles")
+    if not particles then return {} end
+
+    local character = LocalPlayer.Character
+    if not character then return {} end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return {} end
+
+    local colorToPart = {}
+    for _, obj in ipairs(particles:GetChildren()) do
+        if obj.Name == PETAL_PART_NAME and obj:IsA("BasePart") then
+            local color = obj.Color
+            local dist = (obj.Position - hrp.Position).Magnitude
+            local foundKey = nil
+            for c, data in pairs(colorToPart) do
+                if math.abs(c.R - color.R) < 0.01 and
+                   math.abs(c.G - color.G) < 0.01 and
+                   math.abs(c.B - color.B) < 0.01 then
+                    foundKey = c
+                    break
+                end
+            end
+            if foundKey then
+                if dist < colorToPart[foundKey].dist then
+                    colorToPart[foundKey] = {part = obj, dist = dist}
+                end
+            else
+                colorToPart[color] = {part = obj, dist = dist}
+            end
+        end
     end
-    return false
-end
 
--- Установка ковдауна для цвета
-local function setCooldown(color)
-    local colorKey = getColorName(color)
-    if colorKey then
-        local cooldownTime = getCooldownForColor(color)
-        colorCooldowns[colorKey] = os.time() + cooldownTime
-        local cdType = isRedColor(color) and "красный" or "обычный"
-        print(string.format("🕐 Установлен ковдаун %d сек для %s (%s)", cooldownTime, colorKey, cdType))
+    local result = {}
+    for color, data in pairs(colorToPart) do
+        table.insert(result, {color = color, name = getColorName(color), part = data.part, dist = data.dist})
     end
+    return result
 end
 
--- Остальные функции (поиск, телепорт, баффы) остаются без изменений
--- ... (вставьте сюда все остальные функции из предыдущей версии)
+-- Сортировка кандидатов по приоритету
+local function sortByPriority(candidates)
+    table.sort(candidates, function(a, b)
+        local priorityA = COLOR_PRIORITY[a.name] or 999
+        local priorityB = COLOR_PRIORITY[b.name] or 999
+        if priorityA ~= priorityB then
+            return priorityA < priorityB
+        else
+            return math.random() < 0.5
+        end
+    end)
+    return candidates
+end
 
 -- ========== ТЕЛЕПОРТ ==========
 local function teleportToPetalAndBack(petal, reason)
     if not petal or isTeleporting then return end
-    
-    local colorName = getColorName(petal.Color) or "Unknown"
-    print(string.format("🎯 НАЙДЕН ЛЕПЕСТОК: %s (%s)", colorName, reason))
-    
     isTeleporting = true
 
     local character = LocalPlayer.Character
@@ -110,26 +156,21 @@ local function teleportToPetalAndBack(petal, reason)
     if not hrp or not humanoid then isTeleporting = false; return end
 
     local originalPos = hrp.CFrame
-    
-    -- Отмагничивание камеры
+    local colorName = getColorName(petal.Color) or "Unknown"
+
     local oldCameraType = Camera.CameraType
     local oldCameraCFrame = Camera.CFrame
     Camera.CameraType = Enum.CameraType.Scriptable
     Camera.CFrame = oldCameraCFrame
-    
-    task.wait(0.05)
 
-    -- Отключение физики
     humanoid.AutoRotate = false
     humanoid.PlatformStand = true
     hrp.Velocity = Vector3.new(0, 0, 0)
     hrp.RotVelocity = Vector3.new(0, 0, 0)
 
-    -- Телепорт к лепестку
     hrp.CFrame = petal.CFrame + Vector3.new(0, 3, 0)
-    task.wait(0.1)  -- задержка на лепестке
+    task.wait(0.1)
 
-    -- Возврат
     hrp.CFrame = originalPos
     task.wait(0.05)
     hrp.CFrame = originalPos
@@ -137,7 +178,6 @@ local function teleportToPetalAndBack(petal, reason)
     hrp.Velocity = Vector3.new(0, 0, 0)
     hrp.RotVelocity = Vector3.new(0, 0, 0)
 
-    -- Восстановление
     humanoid.PlatformStand = false
     humanoid.AutoRotate = true
     Camera.CameraType = oldCameraType
@@ -145,81 +185,97 @@ local function teleportToPetalAndBack(petal, reason)
     hrp.CFrame = hrp.CFrame + Vector3.new(0, 0.5, 0)
     task.wait(0.05)
 
-    print(string.format("✅ ТЕЛЕПОРТ ВЫПОЛНЕН: %s — %s", colorName, reason))
-    
-    -- Устанавливаем ковдаун
-    setCooldown(petal.Color)
-    
+    print(string.format("🔄 Телепорт к %s (%s) — %s", petal.Name, colorName, reason))
     isTeleporting = false
 end
 
--- Поиск цели для постоянного телепорта
-local function findTargetForConstantTeleport()
-    local particles = Workspace:FindFirstChild("Particles")
-    if not particles then return nil end
+-- ========== ПОЛУЧЕНИЕ АКТИВНЫХ БАФФОВ ==========
+local function fetchPlayerStats()
+    local event = ReplicatedStorage:FindFirstChild("Events")
+    if not event then return nil end
+    local func = event:FindFirstChild("RetrievePlayerStats")
+    if not func then return nil end
+    local success, result = pcall(function()
+        return func:InvokeServer()
+    end)
+    return success and result or nil
+end
 
-    local character = LocalPlayer.Character
-    if not character then return nil end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
+local function collectBuffs(data, results)
+    if type(data) ~= "table" then return end
+    if data.Src and data.Start and data.Dur then
+        if PETAL_COLORS[data.Src] then
+            table.insert(results, data)
+        end
+    end
+    for _, v in pairs(data) do
+        if type(v) == "table" then
+            collectBuffs(v, results)
+        end
+    end
+end
 
-    local byColor = {}
-    for _, obj in ipairs(particles:GetChildren()) do
-        if obj.Name == PETAL_PART_NAME and obj:IsA("BasePart") then
-            local color = obj.Color
-            if isOnCooldown(color) then continue end
-            
-            local dist = (obj.Position - hrp.Position).Magnitude
-            local foundKey = nil
-            for c, data in pairs(byColor) do
-                if math.abs(c.R - color.R) < 0.01 and
-                   math.abs(c.G - color.G) < 0.01 and
-                   math.abs(c.B - color.B) < 0.01 then
-                    foundKey = c
+local function getActiveBuffColors()
+    local stats = fetchPlayerStats()
+    if not stats then return {} end
+    local buffs = {}
+    collectBuffs(stats, buffs)
+    local activeColors = {}
+    for _, buff in ipairs(buffs) do
+        local remaining = (buff.Start + buff.Dur) - os.time()
+        if remaining > 0 then
+            table.insert(activeColors, buff.Src)
+        end
+    end
+    return activeColors
+end
+
+-- ========== ВЫБОР ЦЕЛИ ==========
+local function selectTarget()
+    local allPetals = getAllUniquePetals()
+    if #allPetals == 0 then return nil end
+
+    local activeColors = getActiveBuffColors()
+    if #activeColors == 0 then
+        -- Нет баффов – лутаем любой лепесток по приоритету
+        local sorted = sortByPriority(allPetals)
+        return sorted[1].part
+    else
+        -- Есть баффы – исключаем их цвета из выбора
+        local candidates = {}
+        for _, petal in ipairs(allPetals) do
+            local colorName = petal.name
+            local isActive = false
+            for _, active in ipairs(activeColors) do
+                if active == colorName then
+                    isActive = true
                     break
                 end
             end
-            if foundKey then
-                if dist < byColor[foundKey].dist then
-                    byColor[foundKey] = {part = obj, dist = dist, color = color}
-                end
-            else
-                byColor[color] = {part = obj, dist = dist, color = color}
+            if not isActive then
+                table.insert(candidates, petal)
             end
         end
-    end
-
-    if not next(byColor) then return nil end
-
-    -- Приоритет красного
-    local redColor = PETAL_COLORS["Red Petal"]
-    for color, data in pairs(byColor) do
-        if redColor and
-           math.abs(color.R - redColor.R) < 0.01 and
-           math.abs(color.G - redColor.G) < 0.01 and
-           math.abs(color.B - redColor.B) < 0.01 then
-            return data.part
+        if #candidates > 0 then
+            local sorted = sortByPriority(candidates)
+            return sorted[1].part
+        else
+            -- Все лепестки, которые есть в мире, уже активны как баффы – не телепортируемся
+            return nil
         end
     end
-
-    -- Ближайший среди уникальных
-    local nearest, nearestDist = nil, math.huge
-    for _, data in pairs(byColor) do
-        if data.dist < nearestDist then
-            nearestDist = data.dist
-            nearest = data.part
-        end
-    end
-    return nearest
 end
 
--- ========== ПОСТОЯННЫЙ ТЕЛЕПОРТ ==========
+-- ========== ОСНОВНОЙ ЦИКЛ ==========
 task.spawn(function()
     while true do
         if enabled and not isTeleporting then
-            local target = findTargetForConstantTeleport()
+            local target = selectTarget()
             if target then
-                teleportToPetalAndBack(target, "постоянный")
+                teleportToPetalAndBack(target, "лут по приоритету")
+            else
+                -- Нечего лутать (нет лепестков или все совпадают с активными баффами)
+                -- print("Нет подходящего лепестка для лута")
             end
         end
         task.wait(CONSTANT_TELEPORT_INTERVAL)
@@ -239,6 +295,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ PetalPart Teleporter загружен")
-print("📊 Ковдаун: красные лепестки - 4 сек, остальные - 8 сек")
-print("Нажмите R чтобы включить/выключить")
+print("✅ PetalPart Teleporter (лут других лепестков при наличии баффов) загружен")
+print("Нажмите R для вкл/выкл")
+print("При наличии активных баффов лутаются лепестки другого цвета в порядке приоритета")
+print("При отсутствии баффов лутается любой лепесток по приоритету")
