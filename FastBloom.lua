@@ -1,4 +1,4 @@
--- PetalPart Teleporter (лут других лепестков при наличии баффов)
+-- PetalPart Teleporter (лут по приоритету с порогами: Red<5, остальные<2)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -7,8 +7,8 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 -- ========== КОНФИГУРАЦИЯ ==========
-local UPDATE_INTERVAL = 1.0               -- частота проверки баффов
-local CONSTANT_TELEPORT_INTERVAL = 1.0    -- интервал между телепортами
+local UPDATE_INTERVAL = 1.0               -- частота проверки баффов (не используется напрямую)
+local CONSTANT_TELEPORT_INTERVAL = 2.0    -- интервал между телепортами (теперь 2 секунды)
 local PETAL_PART_NAME = "PetalPart"
 
 -- Цвета лепестков
@@ -27,6 +27,12 @@ local PETAL_COLORS = {
     ["Pink Petal"]    = Color3.fromRGB(255, 130, 201),
     ["Periwinkle Petal"] = Color3.fromRGB(150, 156, 236),
 }
+
+-- Пороги для каждого цвета
+local BUFF_THRESHOLDS = {
+    ["Red Petal"] = 5,   -- красный < 5 сек
+}
+local DEFAULT_THRESHOLD = 2  -- остальные < 2 сек
 
 -- Приоритет цветов (меньше = выше)
 local COLOR_PRIORITY = {
@@ -189,7 +195,7 @@ local function teleportToPetalAndBack(petal, reason)
     isTeleporting = false
 end
 
--- ========== ПОЛУЧЕНИЕ АКТИВНЫХ БАФФОВ ==========
+-- ========== ПОЛУЧЕНИЕ АКТИВНЫХ БАФФОВ С ОСТАТКОМ ==========
 local function fetchPlayerStats()
     local event = ReplicatedStorage:FindFirstChild("Events")
     if not event then return nil end
@@ -215,55 +221,51 @@ local function collectBuffs(data, results)
     end
 end
 
-local function getActiveBuffColors()
+-- Возвращает таблицу { [имя цвета] = оставшееся_время }
+local function getActiveBuffRemaining()
     local stats = fetchPlayerStats()
     if not stats then return {} end
     local buffs = {}
     collectBuffs(stats, buffs)
-    local activeColors = {}
+    local active = {}
     for _, buff in ipairs(buffs) do
         local remaining = (buff.Start + buff.Dur) - os.time()
         if remaining > 0 then
-            table.insert(activeColors, buff.Src)
+            active[buff.Src] = remaining
         end
     end
-    return activeColors
+    return active
 end
 
--- ========== ВЫБОР ЦЕЛИ ==========
+-- ========== ВЫБОР ЦЕЛИ С УЧЁТОМ ПОРОГОВ ==========
 local function selectTarget()
     local allPetals = getAllUniquePetals()
     if #allPetals == 0 then return nil end
 
-    local activeColors = getActiveBuffColors()
-    if #activeColors == 0 then
-        -- Нет баффов – лутаем любой лепесток по приоритету
-        local sorted = sortByPriority(allPetals)
-        return sorted[1].part
-    else
-        -- Есть баффы – исключаем их цвета из выбора
-        local candidates = {}
-        for _, petal in ipairs(allPetals) do
-            local colorName = petal.name
-            local isActive = false
-            for _, active in ipairs(activeColors) do
-                if active == colorName then
-                    isActive = true
-                    break
-                end
-            end
-            if not isActive then
+    local activeBuffs = getActiveBuffRemaining()  -- таблица имя -> остаток
+    local candidates = {}
+
+    for _, petal in ipairs(allPetals) do
+        local colorName = petal.name
+        local remaining = activeBuffs[colorName]
+        local threshold = BUFF_THRESHOLDS[colorName] or DEFAULT_THRESHOLD
+
+        if remaining then
+            -- Бафф активен
+            if remaining < threshold then
+                -- Осталось меньше порога → можно лутать (для продления)
                 table.insert(candidates, petal)
             end
-        end
-        if #candidates > 0 then
-            local sorted = sortByPriority(candidates)
-            return sorted[1].part
+            -- Если осталось >= порога, не включаем
         else
-            -- Все лепестки, которые есть в мире, уже активны как баффы – не телепортируемся
-            return nil
+            -- Баффа нет → можно лутать
+            table.insert(candidates, petal)
         end
     end
+
+    if #candidates == 0 then return nil end
+    local sorted = sortByPriority(candidates)
+    return sorted[1].part
 end
 
 -- ========== ОСНОВНОЙ ЦИКЛ ==========
@@ -272,10 +274,7 @@ task.spawn(function()
         if enabled and not isTeleporting then
             local target = selectTarget()
             if target then
-                teleportToPetalAndBack(target, "лут по приоритету")
-            else
-                -- Нечего лутать (нет лепестков или все совпадают с активными баффами)
-                -- print("Нет подходящего лепестка для лута")
+                teleportToPetalAndBack(target, "лут по приоритету (с порогами)")
             end
         end
         task.wait(CONSTANT_TELEPORT_INTERVAL)
@@ -295,7 +294,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ PetalPart Teleporter (лут других лепестков при наличии баффов) загружен")
+print("✅ PetalPart Teleporter (лут по приоритету с порогами) загружен")
 print("Нажмите R для вкл/выкл")
-print("При наличии активных баффов лутаются лепестки другого цвета в порядке приоритета")
-print("При отсутствии баффов лутается любой лепесток по приоритету")
+print("Телепорт каждые 2 секунды")
+print("Пороги: Red Petal <5 сек, остальные <2 сек")
+print("Если бафф активен и осталось >= порога, лепесток не лутается")
+print("Приоритет: Red → Periwinkle → Pink → Scarlet → Violet → Merigold → Green → Yellow → остальные случайно")
