@@ -5,8 +5,8 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- ===== НАСТРОЙКИ =====
-local ABILITY_TOKEN_MULTIPLIER = 1.24        -- твой множитель способностей
-local DIGITAL_BEE_LEVEL = 23                  -- уровень Digital Bee (если нет, поставь 1)
+local ABILITY_TOKEN_MULTIPLIER = 1.23        -- твой множитель способностей
+local DIGITAL_BEE_LEVEL = 22                  -- уровень Digital Bee (если нет, поставь 1)
 local DUPED_HEIGHT_THRESHOLD = 5              -- если токен выше игрока на это число студий, считаем дублированным
 -- =====================
 
